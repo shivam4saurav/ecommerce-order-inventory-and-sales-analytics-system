@@ -426,9 +426,11 @@ if (fs.existsSync(DIST_DIR)) {
 initDatabase().then(() => {
   app.listen(PORT, () => {
     console.log(`===========================================================================`);
-    console.log(` Meridian Commerce Full-Stack Application Server (Ready for Render & Local)`);
+    console.log(` Meridian Commerce Full-Stack Application Server`);
     console.log(` Listening on: http://localhost:${PORT}`);
     console.log(` Database: ${process.env.DATABASE_URL ? 'Cloud PostgreSQL (DATABASE_URL)' : 'Local PostgreSQL'}`);
     console.log(`===========================================================================`);
   });
 });
+
+module.exports = app;
