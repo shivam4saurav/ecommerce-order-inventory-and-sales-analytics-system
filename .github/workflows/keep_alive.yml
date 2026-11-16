@@ -1,0 +1,25 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    # Trigger every 14 minutes (Render sleeps after 15 minutes of inactivity)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Service
+        run: |
+          # Use repository secret/variable if configured, or default fallback
+          URL="${{ secrets.RENDER_APP_URL || vars.RENDER_APP_URL || 'https://meridian-commerce.onrender.com' }}"
+          ENDPOINT="$URL/api/stats"
+          echo "Sending keep-alive ping to $ENDPOINT..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 40 "$ENDPOINT" || echo "000")
+          echo "Received HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✔ Service is awake and responding healthy."
+          else
+            echo "⚠ Ping completed with status $HTTP_STATUS (service might be waking up or URL not configured yet)."
+          fi
