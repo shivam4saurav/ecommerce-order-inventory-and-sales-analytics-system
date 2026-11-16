@@ -1,25 +1,33 @@
-name: Keep Render Alive
+name: 24/7 Keep Alive Pinger (Render & Vercel)
 
 on:
   schedule:
-    # Trigger every 14 minutes (Render sleeps after 15 minutes of inactivity)
-    - cron: '*/14 * * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
+    # Trigger every 5 minutes to guarantee the server never sleeps
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard anytime
 
 jobs:
-  ping:
+  ping-services:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Render Service
+      - name: Ping Render Backend
         run: |
-          # Use repository secret/variable if configured, or default fallback
-          URL="${{ secrets.RENDER_APP_URL || vars.RENDER_APP_URL || 'https://meridian-commerce-udwa.onrender.com' }}"
-          ENDPOINT="$URL/api/stats"
-          echo "Sending keep-alive ping to $ENDPOINT..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 40 "$ENDPOINT" || echo "000")
-          echo "Received HTTP status: $HTTP_STATUS"
-          if [ "$HTTP_STATUS" -eq 200 ]; then
-            echo "✔ Service is awake and responding healthy."
+          RENDER_URL="${{ secrets.RENDER_APP_URL || vars.RENDER_APP_URL || 'https://meridian-commerce-udwa.onrender.com' }}"
+          ENDPOINT="$RENDER_URL/api/stats"
+          echo "Pinging Render service: $ENDPOINT at $(date -u)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 35 "$ENDPOINT" || echo "000")
+          echo "Render HTTP Status: $STATUS"
+          if [ "$STATUS" -eq 200 ]; then
+            echo "✔ Render service is online, warm, and responsive."
           else
-            echo "⚠ Ping completed with status $HTTP_STATUS (service might be waking up or URL not configured yet)."
+            echo "⚠ Render status was $STATUS. Retrying in 5s..."
+            sleep 5
+            curl -s -f -m 35 "$ENDPOINT" > /dev/null && echo "✔ Render recovered." || echo "Render ping finished."
           fi
+
+      - name: Ping Vercel Frontend & Serverless API
+        run: |
+          VERCEL_URL="https://ecommerce-order-inventory-and-sales.vercel.app/api/stats"
+          echo "Pinging Vercel service: $VERCEL_URL at $(date -u)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 25 "$VERCEL_URL" || echo "000")
+          echo "Vercel HTTP Status: $STATUS"
