@@ -1,0 +1,27 @@
+=== Module 1: Schema Build and Record Validation ===
+
+ total_customers | total_products | inventory_records | total_orders | order_item_records | payment_records | successful_payment_revenue | low_stock_products 
+-----------------+----------------+-------------------+--------------+--------------------+-----------------+----------------------------+--------------------
+               5 |              6 |                 6 |            6 |                 10 |               6 |                  100200.00 |                  2
+(1 row)
+
+ table_name  | total_records 
+-------------+---------------
+ customers   |             5
+ products    |             6
+ inventory   |             6
+ orders      |             6
+ order_items |            10
+ payments    |             6
+(6 rows)
+
+ order_id | calculated_total 
+----------+------------------
+        1 |         56600.00
+        2 |          4000.00
+        3 |         12000.00
+        4 |         30800.00
+        5 |          5000.00
+        6 |          3800.00
+(6 rows)
+

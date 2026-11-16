@@ -1,0 +1,21 @@
+{
+  "name": "ecommerce-order-inventory-and-sales-analytics-system",
+  "version": "1.0.0",
+  "description": "E-Commerce Order, Inventory and Sales Analytics System - Full-Stack React + Node.js + PostgreSQL 18",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tests/test_all_functionalities.js",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "build": "cd frontend && npm run build",
+    "experiment": "python3 scripts/run_experiment.py"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "author": "Shivam Saurav",
+  "license": "ISC"
+}

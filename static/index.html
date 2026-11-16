@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Commerce Order, Inventory & Sales Analytics | PostgreSQL 18 Case Study</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-card { background: #1e293b; border: 1px solid #334155; }
+    .badge-delivered { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-shipped { background-color: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-paid { background-color: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+    .badge-pending { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-failed { background-color: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="glass sticky top-0 z-50 border-b border-slate-800 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <i class="fa-solid fa-database text-white text-lg"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-lg text-white tracking-tight">E-Commerce Analytics System</h1>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-medium">PostgreSQL 18</span>
+        </div>
+        <p class="text-xs text-slate-400">Advanced Database Management Systems (ADBMS) Case Study</p>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-slate-400">Database:</span>
+        <span class="text-emerald-400 font-semibold">ecommerce_case_study</span>
+      </div>
+      <button onclick="resetDatabase()" title="Reset database to benchmark sample state" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-rotate-right"></i> Reset DB
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-900/60 border-r border-slate-800/80 p-4 flex flex-col justify-between shrink-0">
+      <nav class="space-y-1">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition bg-indigo-600/10 text-indigo-400 border border-indigo-500/30">
+          <i class="fa-solid fa-chart-pie w-5 text-center"></i> Overview & KPIs
+        </button>
+        <button onclick="switchTab('orders')" id="nav-orders" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-receipt w-5 text-center"></i> Orders & Summaries
+        </button>
+        <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-boxes-stacked w-5 text-center"></i> Inventory & Triggers
+        </button>
+        <button onclick="switchTab('sales')" id="nav-sales" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-arrow-trend-up w-5 text-center"></i> Product Sales
+        </button>
+        <button onclick="switchTab('acid')" id="nav-acid" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-shield-halved w-5 text-center"></i> ACID & Transactions
+        </button>
+        <button onclick="switchTab('explain')" id="nav-explain" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-magnifying-glass-chart w-5 text-center"></i> Query Optimizer
+        </button>
+        <button onclick="switchTab('schema')" id="nav-schema" class="nav-btn w-full text-left px-3.5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-3 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+          <i class="fa-solid fa-diagram-project w-5 text-center"></i> ER Schema & Specs
+        </button>
+      </nav>
+
+      <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-xs text-slate-400 space-y-1">
+        <div class="flex justify-between">
+          <span>Student:</span>
+          <span class="text-slate-200 font-semibold">Shivam Saurav</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Server Engine:</span>
+          <span class="text-slate-200">PostgreSQL 18.6</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Status:</span>
+          <span class="text-emerald-400 font-medium">● Connected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto p-8 space-y-8">
+
+      <!-- ============================================================== -->
+      <!-- TAB 1: OVERVIEW & KPIS -->
+      <!-- ============================================================== -->
+      <section id="tab-dashboard" class="tab-pane space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Executive Performance Dashboard</h2>
+          <p class="text-sm text-slate-400">Real-time database aggregation metrics across customers, orders, inventory, and revenue.</p>
+        </div>
+
+        <!-- 4 KPI Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Realized Revenue -->
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs uppercase font-medium text-slate-400">Monthly Realized Revenue</p>
+                <h3 class="text-2xl font-extrabold text-white mt-1" id="kpi-revenue">₹100,200.00</h3>
+                <p class="text-xs text-emerald-400 font-medium mt-1"><i class="fa-solid fa-circle-check"></i> 5 Settled Payments (Oct 2026)</p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <i class="fa-solid fa-indian-rupee-sign"></i>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 flex justify-between">
+              <span>Total Gross Orders:</span>
+              <span class="text-slate-200 font-medium" id="kpi-gross-orders">₹112,200.00</span>
+            </div>
+          </div>
+
+          <!-- Total Orders -->
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs uppercase font-medium text-slate-400">Total Customer Orders</p>
+                <h3 class="text-2xl font-extrabold text-white mt-1" id="kpi-orders">6</h3>
+                <p class="text-xs text-indigo-400 font-medium mt-1"><i class="fa-solid fa-box"></i> 10 Total Order Items</p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <i class="fa-solid fa-cart-shopping"></i>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 flex justify-between">
+              <span>Unique Customers:</span>
+              <span class="text-slate-200 font-medium" id="kpi-customers">5 Customers</span>
+            </div>
+          </div>
+
+          <!-- Catalog Products -->
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs uppercase font-medium text-slate-400">Catalog Products</p>
+                <h3 class="text-2xl font-extrabold text-white mt-1" id="kpi-products">6</h3>
+                <p class="text-xs text-blue-400 font-medium mt-1"><i class="fa-solid fa-tags"></i> Electronics & Accessories</p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                <i class="fa-solid fa-layer-group"></i>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 flex justify-between">
+              <span>Top Sold:</span>
+              <span class="text-slate-200 font-medium">Wireless Mouse (4)</span>
+            </div>
+          </div>
+
+          <!-- Low Stock Alert -->
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs uppercase font-medium text-slate-400">Low-Stock Alert</p>
+                <h3 class="text-2xl font-extrabold text-amber-400 mt-1" id="kpi-low-stock">2 Products</h3>
+                <p class="text-xs text-amber-400/80 font-medium mt-1"><i class="fa-solid fa-triangle-exclamation"></i> Below Threshold (&lt; 5)</p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                <i class="fa-solid fa-bell"></i>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 flex justify-between">
+              <span>Replenishment Priority:</span>
+              <span class="text-amber-400 font-medium">Headphones (3), Monitor (4)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Sales Breakdown Chart -->
+          <div class="glass-card p-5 rounded-2xl">
+            <h4 class="font-semibold text-sm text-slate-200 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-indigo-400"></i> Product Sales Volume (Units Sold)
+            </h4>
+            <div class="h-64">
+              <canvas id="salesChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Revenue Analytics Comparison -->
+          <div class="glass-card p-5 rounded-2xl flex flex-col justify-between">
+            <div>
+              <h4 class="font-semibold text-sm text-slate-200 mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-scale-balanced text-indigo-400"></i> Financial Reconciliation (Order Value vs. Realized Revenue)
+              </h4>
+              <p class="text-xs text-slate-400 mb-4">Demonstration of Module 2: Order value counts all placed orders, while revenue counts only verified <code class="text-emerald-400">SUCCESS</code> payments.</p>
+            </div>
+            <div class="space-y-4">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-300">Realized Successful Revenue</span>
+                  <span class="font-semibold text-emerald-400">₹100,200.00 (89.3%)</span>
+                </div>
+                <div class="w-full h-3 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full" style="width: 89.3%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-300">Unsettled / Pending Order Value (Order #3)</span>
+                  <span class="font-semibold text-amber-400">₹12,000.00 (10.7%)</span>
+                </div>
+                <div class="w-full h-3 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full" style="width: 10.7%"></div>
+                </div>
+              </div>
+              <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-xs text-slate-400">
+                <i class="fa-solid fa-circle-info text-indigo-400 mr-1"></i>
+                Order #3 by <strong>Rahul Mehta</strong> (₹12,000.00) has payment status <code>FAILED</code>. It is correctly excluded from the ₹100,200 monthly revenue query.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 2: ORDERS & SUMMARIES -->
+      <!-- ============================================================== -->
+      <section id="tab-orders" class="tab-pane hidden space-y-6">
+        <div class="flex justify-between items-end">
+          <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Order Summaries & Operational Reports</h2>
+            <p class="text-sm text-slate-400">Replicating pgAdmin Output (Figure 6) with multi-table joins across orders, customers, items, and payments.</p>
+          </div>
+          <button onclick="fetchOrders()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300">
+              <thead class="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="px-5 py-3.5">Order ID</th>
+                  <th class="px-5 py-3.5">Customer Name</th>
+                  <th class="px-5 py-3.5">City</th>
+                  <th class="px-5 py-3.5">Order Date</th>
+                  <th class="px-5 py-3.5">Order Status</th>
+                  <th class="px-5 py-3.5 text-right">Order Total (₹)</th>
+                  <th class="px-5 py-3.5 text-center">Payment Status</th>
+                  <th class="px-5 py-3.5 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table-body" class="divide-y divide-slate-800">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Line Item Detail Drawer / Card -->
+        <div id="order-items-detail-card" class="glass-card p-5 rounded-2xl hidden">
+          <div class="flex justify-between items-center mb-4">
+            <h4 class="font-semibold text-sm text-slate-200" id="order-items-title">Order Line Items</h4>
+            <button onclick="document.getElementById('order-items-detail-card').classList.add('hidden')" class="text-slate-400 hover:text-white text-xs">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-900 text-slate-400 uppercase">
+                <tr>
+                  <th class="px-4 py-2">Item ID</th>
+                  <th class="px-4 py-2">Product Name</th>
+                  <th class="px-4 py-2">Category</th>
+                  <th class="px-4 py-2 text-center">Quantity</th>
+                  <th class="px-4 py-2 text-right">Unit Price</th>
+                  <th class="px-4 py-2 text-right">Line Total</th>
+                </tr>
+              </thead>
+              <tbody id="order-items-tbody" class="divide-y divide-slate-800">
+                <!-- Items -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 3: INVENTORY & TRIGGERS -->
+      <!-- ============================================================== -->
+      <section id="tab-inventory" class="tab-pane hidden space-y-6">
+        <div class="flex justify-between items-end">
+          <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Real-Time Inventory & Trigger Automation</h2>
+            <p class="text-sm text-slate-400">Demonstrates Module 4 stock updates, safety replenishment thresholds (&lt; 5), and PL/pgSQL automated trigger timestamps.</p>
+          </div>
+          <button onclick="fetchInventory()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
+        </div>
+
+        <!-- Live Stock Table -->
+        <div class="glass-card rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300">
+              <thead class="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="px-5 py-3.5">Product ID</th>
+                  <th class="px-5 py-3.5">Product Name</th>
+                  <th class="px-5 py-3.5">Category</th>
+                  <th class="px-5 py-3.5 text-right">Unit Price (₹)</th>
+                  <th class="px-5 py-3.5 text-center">Stock Quantity</th>
+                  <th class="px-5 py-3.5 text-center">Stock Status</th>
+                  <th class="px-5 py-3.5">Last Updated (Trigger Timestamp)</th>
+                  <th class="px-5 py-3.5 text-center">Quick Update</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-table-body" class="divide-y divide-slate-800">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Interactive Inventory Test Box (Figure 9 Experiment) -->
+        <div class="glass-card p-6 rounded-2xl border-indigo-500/30">
+          <h4 class="font-bold text-base text-white mb-2 flex items-center gap-2">
+            <i class="fa-solid fa-bolt text-indigo-400"></i> Module 4 Benchmark Test: Update Product #2 (Wireless Mouse)
+          </h4>
+          <p class="text-xs text-slate-400 mb-4">
+            In the case study experiment, Product #2 stock was updated from <strong>50 to 49</strong>. The database trigger automatically captures and updates the <code class="text-indigo-400">last_updated</code> column to the exact microsecond.
+          </p>
+          <div class="flex items-center gap-4">
+            <button onclick="updateStock(2, 49)" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/20 transition flex items-center gap-2">
+              <i class="fa-solid fa-check"></i> Set Stock to 49 (Experiment Test)
+            </button>
+            <button onclick="updateStock(2, 50)" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition flex items-center gap-2">
+              <i class="fa-solid fa-rotate-left"></i> Reset Stock to 50
+            </button>
+            <span id="inventory-update-feedback" class="text-xs text-emerald-400 font-medium"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 4: PRODUCT SALES -->
+      <!-- ============================================================== -->
+      <section id="tab-sales" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Product Sales Analytics & Ranking</h2>
+          <p class="text-sm text-slate-400">Module 3 aggregation ranking products by units sold and cumulative sales value.</p>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300">
+              <thead class="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="px-5 py-3.5">Rank</th>
+                  <th class="px-5 py-3.5">Product ID</th>
+                  <th class="px-5 py-3.5">Product Name</th>
+                  <th class="px-5 py-3.5">Category</th>
+                  <th class="px-5 py-3.5 text-right">Unit Price</th>
+                  <th class="px-5 py-3.5 text-center">Units Sold</th>
+                  <th class="px-5 py-3.5 text-right">Total Revenue Generated (₹)</th>
+                </tr>
+              </thead>
+              <tbody id="sales-table-body" class="divide-y divide-slate-800">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 5: ACID & TRANSACTIONS -->
+      <!-- ============================================================== -->
+      <section id="tab-acid" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">ACID Transactions & Rollback Verification</h2>
+          <p class="text-sm text-slate-400">Live execution of transactional blocks demonstrating Atomicity and Durability in PostgreSQL.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Rollback Test -->
+          <div class="glass-card p-6 rounded-2xl flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-2 text-rose-400 mb-3">
+                <i class="fa-solid fa-arrow-rotate-left text-xl"></i>
+                <h3 class="font-bold text-base text-white">Simulate Transaction Abort & ROLLBACK</h3>
+              </div>
+              <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                Executes a stock reduction inside a transaction block, simulates an unexpected error or inventory check failure, and fires a <code class="text-rose-400">ROLLBACK</code>. Verifies that no partial updates corrupt the database.
+              </p>
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 mb-4">
+                <span class="text-indigo-400">BEGIN;</span><br>
+                UPDATE inventory SET stock_quantity = stock_quantity - 10 WHERE product_id = 2;<br>
+                <span class="text-rose-400">RAISE EXCEPTION</span> 'Simulated Failure';<br>
+                <span class="text-rose-400">ROLLBACK;</span>
+              </div>
+            </div>
+            <button onclick="testTransaction('rollback')" class="w-full py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-play"></i> Execute Rollback Test
+            </button>
+          </div>
+
+          <!-- Commit Test -->
+          <div class="glass-card p-6 rounded-2xl flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-2 text-emerald-400 mb-3">
+                <i class="fa-solid fa-check-double text-xl"></i>
+                <h3 class="font-bold text-base text-white">Simulate Verified Transaction & COMMIT</h3>
+              </div>
+              <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                Executes a complete inventory deduction, passes all domain integrity and referential checks, and commits the state. Triggers automatically update audit timestamps.
+              </p>
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 mb-4">
+                <span class="text-indigo-400">BEGIN;</span><br>
+                UPDATE inventory SET stock_quantity = 49 WHERE product_id = 2;<br>
+                <span class="text-emerald-400">COMMIT;</span><br>
+                <span class="text-slate-500">-- last_updated automatically modified by trigger</span>
+              </div>
+            </div>
+            <button onclick="testTransaction('commit')" class="w-full py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-play"></i> Execute Commit Test
+            </button>
+          </div>
+        </div>
+
+        <!-- Output Log Box -->
+        <div class="glass-card p-5 rounded-2xl">
+          <h4 class="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-2">Transaction Output Console</h4>
+          <pre id="transaction-console" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-emerald-400 overflow-x-auto min-h-[120px]">Ready to run transactional simulation...</pre>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 6: QUERY PLANNER (EXPLAIN ANALYZE) -->
+      <!-- ============================================================== -->
+      <section id="tab-explain" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Module 5: Query Plan Evaluation (EXPLAIN ANALYZE)</h2>
+          <p class="text-sm text-slate-400">Inspect PostgreSQL cost-based query optimization on selective filter predicates: <code class="text-indigo-400">SELECT * FROM order_items WHERE product_id = 2;</code></p>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button onclick="runExplain('default')" id="btn-explain-default" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium text-xs transition">
+            Default Plan (Sequential Scan)
+          </button>
+          <button onclick="runExplain('index')" id="btn-explain-index" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition">
+            Forced Index Plan (enable_seqscan = off)
+          </button>
+        </div>
+
+        <!-- Plan Metrics Comparison -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="glass-card p-4 rounded-xl">
+            <span class="text-xs text-slate-400 uppercase">Access Method</span>
+            <p class="text-lg font-bold text-white mt-1" id="plan-node-type">Seq Scan</p>
+          </div>
+          <div class="glass-card p-4 rounded-xl">
+            <span class="text-xs text-slate-400 uppercase">Estimated Total Cost</span>
+            <p class="text-lg font-bold text-indigo-400 mt-1" id="plan-cost">1.12</p>
+          </div>
+          <div class="glass-card p-4 rounded-xl">
+            <span class="text-xs text-slate-400 uppercase">Execution Time</span>
+            <p class="text-lg font-bold text-emerald-400 mt-1" id="plan-exec-time">0.015 ms</p>
+          </div>
+          <div class="glass-card p-4 rounded-xl">
+            <span class="text-xs text-slate-400 uppercase">Rows Kept vs Filtered</span>
+            <p class="text-lg font-bold text-slate-200 mt-1" id="plan-rows">3 kept (7 removed)</p>
+          </div>
+        </div>
+
+        <!-- Raw EXPLAIN ANALYZE Output -->
+        <div class="glass-card p-5 rounded-2xl">
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="font-semibold text-xs text-slate-400 uppercase tracking-wider">Raw PostgreSQL Plan Tree</h4>
+            <span class="text-xs text-slate-500 font-mono">Engine: PostgreSQL 18.6</span>
+          </div>
+          <pre id="explain-raw-output" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-indigo-300 font-mono overflow-x-auto min-h-[160px]">Loading query plan...</pre>
+        </div>
+
+        <!-- Educational Callout -->
+        <div class="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-slate-300 space-y-2">
+          <p class="font-bold text-indigo-300 flex items-center gap-2">
+            <i class="fa-solid fa-graduation-cap"></i> Theoretical & Practical Takeaway (Table 4.1 in Case Study Report):
+          </p>
+          <p class="leading-relaxed">
+            Even though a B-Tree index (<code class="text-indigo-400">idx_order_items_product_id</code>) exists on the table, PostgreSQL's cost optimizer intentionally selects a <strong>Sequential Scan</strong>. Because the table contains only 10 rows (residing inside a single 8KB disk page), scanning the block directly incurs an estimated cost of only <strong>1.12</strong>, compared to <strong>8.19</strong> for an Index Scan which requires navigating B-Tree blocks and issuing random heap page reads.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- TAB 7: SCHEMA & ER MODEL -->
+      <!-- ============================================================== -->
+      <section id="tab-schema" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Database Architecture & Relational Entities</h2>
+          <p class="text-sm text-slate-400">Normalized schema structure enforcing 1NF, 2NF, and 3NF across 6 relational tables.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Customers -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-users"></i> customers (5 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">customer_id</span> SERIAL PK</li>
+              <li>customer_name VARCHAR(100)</li>
+              <li>email VARCHAR(100) UNIQUE</li>
+              <li>phone VARCHAR(20)</li>
+              <li>city VARCHAR(50)</li>
+            </ul>
+          </div>
+
+          <!-- Products -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-box"></i> products (6 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">product_id</span> SERIAL PK</li>
+              <li>product_name VARCHAR(120)</li>
+              <li>category VARCHAR(60)</li>
+              <li>price NUMERIC(10,2)</li>
+            </ul>
+          </div>
+
+          <!-- Inventory -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-warehouse"></i> inventory (6 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">inventory_id</span> SERIAL PK</li>
+              <li>product_id INT FK,UK</li>
+              <li>stock_quantity INT</li>
+              <li>last_updated TIMESTAMP (Trigger)</li>
+            </ul>
+          </div>
+
+          <!-- Orders -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-cart-shopping"></i> orders (6 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">order_id</span> SERIAL PK</li>
+              <li>customer_id INT FK</li>
+              <li>order_date DATE</li>
+              <li>status VARCHAR(20)</li>
+            </ul>
+          </div>
+
+          <!-- Order Items -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-list-check"></i> order_items (10 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">order_item_id</span> SERIAL PK</li>
+              <li>order_id INT FK</li>
+              <li>product_id INT FK</li>
+              <li>quantity INT</li>
+              <li>unit_price NUMERIC(10,2)</li>
+            </ul>
+          </div>
+
+          <!-- Payments -->
+          <div class="glass-card p-4 rounded-xl">
+            <h4 class="font-bold text-sm text-indigo-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-credit-card"></i> payments (6 rows)</h4>
+            <ul class="text-xs text-slate-400 space-y-1 font-mono">
+              <li><span class="text-amber-400 font-bold">payment_id</span> SERIAL PK</li>
+              <li>order_id INT FK</li>
+              <li>amount NUMERIC(10,2)</li>
+              <li>payment_method VARCHAR(30)</li>
+              <li>payment_status VARCHAR(20)</li>
+              <li>payment_date TIMESTAMP</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Client-Side JavaScript -->
+  <script>
+    let salesChartInstance = null;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+      document.getElementById('tab-' + tabId).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600/10', 'text-indigo-400', 'border', 'border-indigo-500/30');
+        btn.classList.add('text-slate-400');
+      });
+
+      const activeBtn = document.getElementById('nav-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-400');
+        activeBtn.classList.add('bg-indigo-600/10', 'text-indigo-400', 'border', 'border-indigo-500/30');
+      }
+
+      if (tabId === 'orders') fetchOrders();
+      if (tabId === 'inventory') fetchInventory();
+      if (tabId === 'sales') fetchSales();
+      if (tabId === 'explain') runExplain('default');
+    }
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('kpi-revenue').innerText = '₹' + Number(data.successful_payment_revenue).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-gross-orders').innerText = '₹' + Number(data.total_order_value).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-orders').innerText = data.total_orders;
+        document.getElementById('kpi-customers').innerText = data.total_customers + ' Customers';
+        document.getElementById('kpi-products').innerText = data.total_products;
+        document.getElementById('kpi-low-stock').innerText = data.low_stock_products + ' Products';
+      } catch (e) {
+        console.error('Error fetching stats:', e);
+      }
+    }
+
+    async function fetchSales() {
+      try {
+        const res = await fetch('/api/sales');
+        const items = await res.json();
+        
+        // Populate Table
+        const tbody = document.getElementById('sales-table-body');
+        tbody.innerHTML = '';
+        items.forEach((item, idx) => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-900/50 transition';
+          tr.innerHTML = `
+            <td class="px-5 py-3 font-semibold text-slate-400">#${idx + 1}</td>
+            <td class="px-5 py-3 font-mono text-xs text-indigo-400">${item.product_id}</td>
+            <td class="px-5 py-3 font-medium text-slate-200">${item.product_name}</td>
+            <td class="px-5 py-3 text-xs text-slate-400">${item.category}</td>
+            <td class="px-5 py-3 text-right font-mono text-xs">₹${Number(item.price).toLocaleString('en-IN')}</td>
+            <td class="px-5 py-3 text-center font-bold ${item.total_units_sold === 4 ? 'text-indigo-400' : 'text-slate-200'}">${item.total_units_sold}</td>
+            <td class="px-5 py-3 text-right font-mono text-xs text-emerald-400 font-semibold">₹${Number(item.total_sales_value).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        // Update Chart
+        const labels = items.map(i => i.product_name);
+        const data = items.map(i => i.total_units_sold);
+
+        const ctx = document.getElementById('salesChart').getContext('2d');
+        if (salesChartInstance) salesChartInstance.destroy();
+        salesChartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Units Sold',
+              data: data,
+              backgroundColor: ['#6366f1', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'],
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#334155' } },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Error fetching sales:', e);
+      }
+    }
+
+    async function fetchOrders() {
+      try {
+        const res = await fetch('/api/orders');
+        const orders = await res.json();
+        const tbody = document.getElementById('orders-table-body');
+        tbody.innerHTML = '';
+
+        orders.forEach(o => {
+          let badgeClass = 'badge-delivered';
+          if (o.order_status === 'SHIPPED') badgeClass = 'badge-shipped';
+          if (o.order_status === 'PAID') badgeClass = 'badge-paid';
+          if (o.order_status === 'PENDING') badgeClass = 'badge-pending';
+
+          let payBadge = o.payment_status === 'SUCCESS' ? 'badge-delivered' : 'badge-failed';
+
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-900/50 transition cursor-pointer';
+          tr.onclick = () => showOrderItems(o.order_id, o.customer_name);
+          tr.innerHTML = `
+            <td class="px-5 py-3.5 font-mono text-xs text-indigo-400 font-semibold">#${o.order_id}</td>
+            <td class="px-5 py-3.5 font-medium text-slate-200">${o.customer_name}</td>
+            <td class="px-5 py-3.5 text-xs text-slate-400">${o.city}</td>
+            <td class="px-5 py-3.5 text-xs text-slate-300">${o.order_date}</td>
+            <td class="px-5 py-3.5"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${o.order_status}</span></td>
+            <td class="px-5 py-3.5 text-right font-mono text-xs font-bold text-slate-200">₹${Number(o.order_total).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+            <td class="px-5 py-3.5 text-center"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${payBadge}">${o.payment_status} (${o.payment_method})</span></td>
+            <td class="px-5 py-3.5 text-center">
+              <button class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-indigo-400 font-medium">View Items</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('Error fetching orders:', e);
+      }
+    }
+
+    async function showOrderItems(orderId, customerName) {
+      const card = document.getElementById('order-items-detail-card');
+      card.classList.remove('hidden');
+      document.getElementById('order-items-title').innerText = `Order #${orderId} Line Items (${customerName})`;
+
+      try {
+        const res = await fetch(`/api/order-items?order_id=${orderId}`);
+        const items = await res.json();
+        const tbody = document.getElementById('order-items-tbody');
+        tbody.innerHTML = '';
+        items.forEach(it => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-4 py-2 font-mono text-slate-400">${it.order_item_id}</td>
+            <td class="px-4 py-2 font-medium text-slate-200">${it.product_name}</td>
+            <td class="px-4 py-2 text-slate-400">${it.category}</td>
+            <td class="px-4 py-2 text-center font-bold text-slate-200">${it.quantity}</td>
+            <td class="px-4 py-2 text-right font-mono">₹${Number(it.unit_price).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+            <td class="px-4 py-2 text-right font-mono text-emerald-400 font-semibold">₹${Number(it.line_total).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function fetchInventory() {
+      try {
+        const res = await fetch('/api/inventory');
+        const items = await res.json();
+        const tbody = document.getElementById('inventory-table-body');
+        tbody.innerHTML = '';
+
+        items.forEach(item => {
+          const isLow = item.stock_quantity < 5;
+          const statusBadge = isLow 
+            ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold badge-failed"><i class="fa-solid fa-triangle-exclamation mr-1"></i>LOW STOCK</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold badge-delivered">OPTIMAL</span>';
+
+          const tr = document.createElement('tr');
+          tr.id = `inv-row-${item.product_id}`;
+          tr.className = 'hover:bg-slate-900/50 transition';
+          tr.innerHTML = `
+            <td class="px-5 py-3.5 font-mono text-xs text-indigo-400 font-semibold">#${item.product_id}</td>
+            <td class="px-5 py-3.5 font-medium text-slate-200">${item.product_name}</td>
+            <td class="px-5 py-3.5 text-xs text-slate-400">${item.category}</td>
+            <td class="px-5 py-3.5 text-right font-mono text-xs">₹${Number(item.price).toLocaleString('en-IN')}</td>
+            <td class="px-5 py-3.5 text-center font-bold ${isLow ? 'text-amber-400 text-base' : 'text-slate-200'}">${item.stock_quantity}</td>
+            <td class="px-5 py-3.5 text-center">${statusBadge}</td>
+            <td class="px-5 py-3.5 font-mono text-xs text-slate-400">${item.last_updated}</td>
+            <td class="px-5 py-3.5 text-center">
+              <div class="inline-flex rounded-lg border border-slate-700 bg-slate-800 p-0.5">
+                <button onclick="updateStock(${item.product_id}, ${item.stock_quantity - 1})" class="px-2 py-1 text-xs hover:bg-slate-700 rounded text-slate-300">-1</button>
+                <button onclick="updateStock(${item.product_id}, ${item.stock_quantity + 1})" class="px-2 py-1 text-xs hover:bg-slate-700 rounded text-slate-300">+1</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('Error fetching inventory:', e);
+      }
+    }
+
+    async function updateStock(productId, newQty) {
+      try {
+        const res = await fetch('/api/inventory/update', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ product_id: productId, stock_quantity: newQty })
+        });
+        const data = await res.json();
+        const feedback = document.getElementById('inventory-update-feedback');
+        if (data.success && data.updated && data.updated[0]) {
+          const row = data.updated[0];
+          feedback.innerText = `Updated Product #${row.product_id} to ${row.stock_quantity} units! (Trigger timestamp: ${row.last_updated})`;
+          fetchInventory();
+          fetchStats();
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function testTransaction(mode) {
+      const consoleEl = document.getElementById('transaction-console');
+      consoleEl.innerText = `Executing ${mode.toUpperCase()} transaction on PostgreSQL 18...`;
+
+      try {
+        const res = await fetch('/api/transaction/test', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ mode: mode, product_id: 2, quantity: 49 })
+        });
+        const data = await res.json();
+        consoleEl.innerText = JSON.stringify(data, null, 2);
+        fetchInventory();
+        fetchStats();
+      } catch (e) {
+        consoleEl.innerText = 'Error: ' + e.message;
+      }
+    }
+
+    async function runExplain(mode) {
+      const btnDef = document.getElementById('btn-explain-default');
+      const btnIdx = document.getElementById('btn-explain-index');
+
+      if (mode === 'default') {
+        btnDef.className = 'px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium text-xs transition';
+        btnIdx.className = 'px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition';
+      } else {
+        btnIdx.className = 'px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium text-xs transition';
+        btnDef.className = 'px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition';
+      }
+
+      try {
+        const res = await fetch(`/api/explain?mode=${mode}`);
+        const data = await res.json();
+        document.getElementById('explain-raw-output').innerText = data.plan_text;
+
+        if (data.plan_json && data.plan_json[0] && data.plan_json[0].Plan) {
+          const p = data.plan_json[0].Plan;
+          document.getElementById('plan-node-type').innerText = p['Node Type'];
+          document.getElementById('plan-cost').innerText = `${p['Startup Cost'].toFixed(2)} .. ${p['Total Cost'].toFixed(2)}`;
+          document.getElementById('plan-exec-time').innerText = (data.plan_json[0]['Execution Time'] || 0.015) + ' ms';
+          document.getElementById('plan-rows').innerText = `${p['Actual Rows'] || 3} kept (${p['Rows Removed by Filter'] || 0} removed)`;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function resetDatabase() {
+      if (!confirm("Are you sure you want to reset the database to initial benchmark sample data?")) return;
+      try {
+        const res = await fetch('/api/reset', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message);
+        fetchStats();
+        fetchSales();
+        fetchOrders();
+        fetchInventory();
+      } catch (e) {
+        alert("Error resetting database: " + e.message);
+      }
+    }
+
+    // Initial Load
+    window.onload = () => {
+      fetchStats();
+      fetchSales();
+      fetchOrders();
+      fetchInventory();
+    };
+  </script>
+</body>
+</html>

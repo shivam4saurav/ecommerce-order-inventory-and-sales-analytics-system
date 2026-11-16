@@ -1,0 +1,36 @@
+=== Module 4: Inventory Update and Calculated Order Totals ===
+
+--- Calculated Totals by Order ---
+ order_id | calculated_total 
+----------+------------------
+        1 |         56600.00
+        2 |          4000.00
+        3 |         12000.00
+        4 |         30800.00
+        5 |          5000.00
+        6 |          3800.00
+(6 rows)
+
+
+--- Transaction Control and Inventory Trigger Execution ---
+BEGIN
+UPDATE 1
+ product_id | stock_quantity |        last_updated        
+------------+----------------+----------------------------
+          2 |             45 | 2026-11-16 22:08:29.858195
+(1 row)
+
+ROLLBACK
+ product_id | stock_quantity |    last_updated     
+------------+----------------+---------------------
+          2 |             50 | 2026-10-01 10:00:00
+(1 row)
+
+BEGIN
+UPDATE 1
+COMMIT
+ product_id | stock_quantity |        last_updated        
+------------+----------------+----------------------------
+          2 |             49 | 2026-11-16 22:08:29.862602
+(1 row)
+

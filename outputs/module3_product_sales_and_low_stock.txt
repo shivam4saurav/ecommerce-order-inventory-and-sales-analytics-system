@@ -1,0 +1,21 @@
+=== Module 3: Product Sales and Low-Stock Analysis ===
+
+--- Product Sales Ranking ---
+ product_id |    product_name     |  category   | total_units_sold | total_sales_value 
+------------+---------------------+-------------+------------------+-------------------
+          2 | Wireless Mouse      | Accessories |                4 |           3200.00
+          6 | Web Camera          | Electronics |                3 |          12000.00
+          5 | Headphones          | Accessories |                3 |           6000.00
+          4 | Monitor             | Electronics |                2 |          30000.00
+          3 | Mechanical Keyboard | Accessories |                2 |           6000.00
+          1 | Laptop              | Electronics |                1 |          55000.00
+(6 rows)
+
+
+--- Low Stock Replenishment Alert (< 5 units) ---
+ product_id | product_name |  category   | stock_quantity | stock_status 
+------------+--------------+-------------+----------------+--------------
+          5 | Headphones   | Accessories |              3 | LOW STOCK
+          4 | Monitor      | Electronics |              4 | LOW STOCK
+(2 rows)
+

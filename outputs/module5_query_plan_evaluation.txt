@@ -1,0 +1,41 @@
+=== Module 5: Query Plan Evaluation ===
+
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Seq Scan on order_items  (cost=0.00..27.00 rows=7 width=32) (actual time=0.012..0.014 rows=3.00 loops=1)
+   Filter: (product_id = 2)
+   Rows Removed by Filter: 7
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=70
+ Planning Time: 0.418 ms
+ Execution Time: 0.050 ms
+(8 rows)
+
+DROP INDEX
+CREATE INDEX
+ANALYZE
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Seq Scan on order_items  (cost=0.00..1.12 rows=3 width=21) (actual time=0.006..0.008 rows=3.00 loops=1)
+   Filter: (product_id = 2)
+   Rows Removed by Filter: 7
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=24 read=1
+ Planning Time: 0.165 ms
+ Execution Time: 0.017 ms
+(8 rows)
+
+SET
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_order_items_product_id on order_items  (cost=0.14..8.19 rows=3 width=21) (actual time=0.031..0.032 rows=3.00 loops=1)
+   Index Cond: (product_id = 2)
+   Index Searches: 1
+   Buffers: shared hit=1 read=1
+ Planning Time: 0.030 ms
+ Execution Time: 0.043 ms
+(6 rows)
+
+RESET

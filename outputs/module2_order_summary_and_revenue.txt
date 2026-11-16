@@ -1,0 +1,20 @@
+=== Module 2: Order Summary and Revenue Analytics ===
+
+--- Operational Order Summary ---
+ order_id | customer_name | order_date | order_status | order_total | payment_status | payment_method 
+----------+---------------+------------+--------------+-------------+----------------+----------------
+        1 | Aarav Sharma  | 2026-10-05 | DELIVERED    |    56600.00 | SUCCESS        | UPI
+        2 | Priya Verma   | 2026-10-08 | DELIVERED    |     4000.00 | SUCCESS        | CREDIT_CARD
+        3 | Rahul Mehta   | 2026-10-12 | PENDING      |    12000.00 | FAILED         | NET_BANKING
+        4 | Aarav Sharma  | 2026-10-15 | SHIPPED      |    30800.00 | SUCCESS        | CREDIT_CARD
+        5 | Ananya Singh  | 2026-10-20 | PAID         |     5000.00 | SUCCESS        | DEBIT_CARD
+        6 | Kabir Gupta   | 2026-10-25 | DELIVERED    |     3800.00 | SUCCESS        | UPI
+(6 rows)
+
+
+--- Monthly Revenue (SUCCESS status only) ---
+ sales_month | successful_payments | total_revenue 
+-------------+---------------------+---------------
+ 2026-10     |                   5 |     100200.00
+(1 row)
+
