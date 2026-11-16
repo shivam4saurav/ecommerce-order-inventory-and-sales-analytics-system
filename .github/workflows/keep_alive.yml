@@ -13,7 +13,7 @@ jobs:
       - name: Ping Render Service
         run: |
           # Use repository secret/variable if configured, or default fallback
-          URL="${{ secrets.RENDER_APP_URL || vars.RENDER_APP_URL || 'https://meridian-commerce.onrender.com' }}"
+          URL="${{ secrets.RENDER_APP_URL || vars.RENDER_APP_URL || 'https://meridian-commerce-udwa.onrender.com' }}"
           ENDPOINT="$URL/api/stats"
           echo "Sending keep-alive ping to $ENDPOINT..."
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 40 "$ENDPOINT" || echo "000")
