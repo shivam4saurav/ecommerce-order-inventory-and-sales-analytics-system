@@ -1,19 +1,17 @@
 // ==============================================================================
 // E-Commerce Order, Inventory and Sales Analytics System
-// Full-Stack Node.js + Express API Server
-// Database: PostgreSQL 18.6 (ecommerce_case_study)
+// Full-Stack Node.js + Express API Server (Cloud & Local Ready)
+// Database: PostgreSQL (Cloud DATABASE_URL or Local ecommerce_case_study)
 // ==============================================================================
 
 const express = require('express');
 const cors = require('cors');
-const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 5050;
-const DB_NAME = 'ecommerce_case_study';
-const DB_USER = process.env.USER || 'shivam_saurav';
 const PROJECT_ROOT = __dirname;
 const SQL_DIR = path.join(PROJECT_ROOT, 'sql');
 const DIST_DIR = path.join(PROJECT_ROOT, 'frontend', 'dist');
@@ -21,28 +19,63 @@ const DIST_DIR = path.join(PROJECT_ROOT, 'frontend', 'dist');
 app.use(cors());
 app.use(express.json());
 
-// Helper to execute SQL queries via psql
-function runSql(query) {
-  return new Promise((resolve, reject) => {
-    execFile('psql', ['-U', DB_USER, '-d', DB_NAME, '-t', '-A', '-c', query], (error, stdout, stderr) => {
-      if (error) {
-        return reject(stderr || error.message);
-      }
-      resolve(stdout.trim());
-    });
+// ----------------------------------------------------------------------------
+// PostgreSQL Pool Configuration (Supports Cloud DATABASE_URL and Local Sockets)
+// ----------------------------------------------------------------------------
+let pool;
+
+if (process.env.DATABASE_URL) {
+  // Cloud deployment (Render, Railway, Neon, etc.)
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+  });
+} else {
+  // Local development
+  pool = new Pool({
+    database: process.env.DB_NAME || 'ecommerce_case_study',
+    user: process.env.DB_USER || process.env.USER || 'shivam_saurav',
+    host: process.env.DB_HOST || '/tmp',
+    port: parseInt(process.env.DB_PORT || '5432', 10)
   });
 }
 
+// Helper to execute SQL queries and extract JSON/aggregate result
+async function runSql(query) {
+  const result = await pool.query(query);
+  if (!result.rows || result.rows.length === 0) return null;
+  const firstVal = Object.values(result.rows[0])[0];
+  if (typeof firstVal === 'string') {
+    try {
+      return JSON.parse(firstVal);
+    } catch {
+      return firstVal;
+    }
+  }
+  return firstVal;
+}
+
 // Helper to execute SQL script files
-function runSqlFile(filePath) {
-  return new Promise((resolve, reject) => {
-    execFile('psql', ['-U', DB_USER, '-d', DB_NAME, '-f', filePath], (error, stdout, stderr) => {
-      if (error) {
-        return reject(stderr || error.message);
-      }
-      resolve(stdout.trim());
-    });
-  });
+async function runSqlFile(filePath) {
+  const sql = fs.readFileSync(filePath, 'utf8');
+  await pool.query(sql);
+}
+
+// Initialize tables on startup if database is brand new (e.g. freshly created on Render)
+async function initDatabase() {
+  try {
+    const checkRes = await pool.query("SELECT to_regclass('public.customers') AS exists;");
+    if (!checkRes.rows[0].exists) {
+      console.log('▶ Empty database detected. Initializing schema and seed data...');
+      await runSqlFile(path.join(SQL_DIR, '01_schema.sql'));
+      await runSqlFile(path.join(SQL_DIR, '02_seed_data.sql'));
+      console.log('✔ Database initialized successfully with benchmark dataset.');
+    } else {
+      console.log('✔ Connected to active PostgreSQL database.');
+    }
+  } catch (err) {
+    console.warn('Database initialization note:', err.message);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -66,7 +99,7 @@ app.get('/api/stats', async (req, res) => {
       );
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -93,7 +126,7 @@ app.get('/api/customers', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -117,7 +150,7 @@ app.get('/api/products', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -147,7 +180,7 @@ app.get('/api/orders', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -176,7 +209,7 @@ app.get('/api/order-items', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -202,7 +235,7 @@ app.get('/api/inventory', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -228,7 +261,7 @@ app.get('/api/sales', async (req, res) => {
       ) t;
     `;
     const result = await runSql(sql);
-    res.json(JSON.parse(result));
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -246,59 +279,54 @@ app.post('/api/orders/create', async (req, res) => {
   const payStatus = payment_status || 'SUCCESS';
   const initialOrderStatus = payStatus === 'SUCCESS' ? 'PAID' : 'PENDING';
 
-  // Calculate order total
   let orderTotal = 0;
   for (const it of items) {
     orderTotal += (it.quantity || 1) * Number(it.unit_price || 0);
   }
 
+  const client = await pool.connect();
   try {
-    // Generate PL/pgSQL block to execute order creation atomically
-    let insertItemsSql = '';
-    let updateInventorySql = '';
+    await client.query('BEGIN');
 
+    // 1. Insert order header
+    const orderRes = await client.query(
+      `INSERT INTO orders (customer_id, order_date, status)
+       VALUES ($1, CURRENT_DATE, $2)
+       RETURNING order_id, order_date, status`,
+      [custId, initialOrderStatus]
+    );
+    const newOrderId = orderRes.rows[0].order_id;
+
+    // 2. Insert line items & decrement inventory
     for (const it of items) {
       const pid = parseInt(it.product_id, 10);
       const qty = parseInt(it.quantity, 10);
       const price = Number(it.unit_price).toFixed(2);
 
-      insertItemsSql += `
-        INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-        VALUES (new_order_id, ${pid}, ${qty}, ${price});
-      `;
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+         VALUES ($1, $2, $3, $4)`,
+        [newOrderId, pid, qty, price]
+      );
 
-      updateInventorySql += `
-        UPDATE inventory
-        SET stock_quantity = GREATEST(0, stock_quantity - ${qty})
-        WHERE product_id = ${pid};
-      `;
+      await client.query(
+        `UPDATE inventory
+         SET stock_quantity = GREATEST(0, stock_quantity - $1)
+         WHERE product_id = $2`,
+        [qty, pid]
+      );
     }
 
-    const txSql = `
-      DO $$
-      DECLARE
-        new_order_id INT;
-      BEGIN
-        -- 1. Insert order header
-        INSERT INTO orders (customer_id, order_date, status)
-        VALUES (${custId}, CURRENT_DATE, '${initialOrderStatus}')
-        RETURNING order_id INTO new_order_id;
+    // 3. Record payment transaction
+    await client.query(
+      `INSERT INTO payments (order_id, amount, payment_method, payment_status, payment_date)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+      [newOrderId, orderTotal.toFixed(2), payMethod, payStatus]
+    );
 
-        -- 2. Insert line items
-        ${insertItemsSql}
+    await client.query('COMMIT');
 
-        -- 3. Decrement inventory (fires update trigger)
-        ${updateInventorySql}
-
-        -- 4. Record payment transaction
-        INSERT INTO payments (order_id, amount, payment_method, payment_status, payment_date)
-        VALUES (new_order_id, ${orderTotal.toFixed(2)}, '${payMethod}', '${payStatus}', CURRENT_TIMESTAMP);
-      END $$;
-    `;
-
-    await runSql(txSql);
-
-    // Fetch the newly created order
+    // 4. Fetch the newly created order
     const getOrderSql = `
       SELECT json_agg(t) FROM (
         SELECT 
@@ -312,12 +340,11 @@ app.post('/api/orders/create', async (req, res) => {
           '${payMethod}' AS payment_method
         FROM orders o
         JOIN customers c ON o.customer_id = c.customer_id
-        ORDER BY o.order_id DESC
-        LIMIT 1
+        WHERE o.order_id = ${newOrderId}
       ) t;
     `;
     const createdResult = await runSql(getOrderSql);
-    const createdOrder = JSON.parse(createdResult)?.[0] || {};
+    const createdOrder = createdResult?.[0] || {};
 
     res.json({
       success: true,
@@ -325,7 +352,10 @@ app.post('/api/orders/create', async (req, res) => {
       order: createdOrder
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: String(err) });
+  } finally {
+    client.release();
   }
 });
 
@@ -347,7 +377,7 @@ app.post('/api/orders/update-status', async (req, res) => {
       SELECT COALESCE(json_agg(t), '[]'::json) FROM t;
     `;
     const result = await runSql(sql);
-    res.json({ success: true, updated: JSON.parse(result) });
+    res.json({ success: true, updated: result });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -368,7 +398,7 @@ app.post('/api/inventory/update', async (req, res) => {
       SELECT COALESCE(json_agg(t), '[]'::json) FROM t;
     `;
     const result = await runSql(sql);
-    res.json({ success: true, updated: JSON.parse(result) });
+    res.json({ success: true, updated: result });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -393,10 +423,12 @@ if (fs.existsSync(DIST_DIR)) {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`===========================================================================`);
-  console.log(` Meridian Commerce Full-Stack Node.js Application Server`);
-  console.log(` Listening on: http://localhost:${PORT}`);
-  console.log(` Connected to PostgreSQL 18: ${DB_NAME}`);
-  console.log(`===========================================================================`);
+initDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log(`===========================================================================`);
+    console.log(` Meridian Commerce Full-Stack Application Server (Ready for Render & Local)`);
+    console.log(` Listening on: http://localhost:${PORT}`);
+    console.log(` Database: ${process.env.DATABASE_URL ? 'Cloud PostgreSQL (DATABASE_URL)' : 'Local PostgreSQL'}`);
+    console.log(`===========================================================================`);
+  });
 });

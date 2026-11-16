@@ -9,12 +9,13 @@
     "test": "node tests/test_all_functionalities.js",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
-    "build": "cd frontend && npm run build",
+    "build": "cd frontend && npm install && npm run build",
     "experiment": "python3 scripts/run_experiment.py"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "pg": "^8.23.1"
   },
   "author": "Shivam Saurav",
   "license": "ISC"
